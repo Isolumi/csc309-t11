@@ -113,6 +113,16 @@ export const AuthProvider = ({ children }) => {
                 body: JSON.stringify(userData)
             });
 
+            console.log('Response status:', response.status);
+            const contentType = response.headers.get("content-type");
+            console.log('Content-Type:', contentType);
+
+            if (!contentType || !contentType.includes("application/json")) {
+                const textContent = await response.text();
+                console.error('Non-JSON response:', textContent);
+                return "Server error: Invalid response format";
+            }
+
             const data = await response.json();
 
             if (!response.ok) {
@@ -122,7 +132,8 @@ export const AuthProvider = ({ children }) => {
             navigate("/success");
             return null;
         } catch (error) {
-            return "An error occurred during registration: " + error.message;
+            console.error('Registration error:', error);
+            return `An error occurred during registration: ${error.message}`;
         }
     };
 
