@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect} from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const AuthContext = createContext(null);
@@ -19,30 +19,50 @@ export const AuthProvider = ({ children }) => {
     const navigate = useNavigate();
     const [user, setUser] = useState(null);
 
+    // Check authentication status on mount and token changes
     useEffect(() => {
-        const token = localStorage.getItem('token');
-        if (token) {
-            fetchUserData();
-        }
+        const checkAuth = async () => {
+            const token = localStorage.getItem('token');
+            if (token) {
+                await fetchUserData();
+            } else {
+                setUser(null);
+            }
+        };
+        
+        checkAuth();
     }, []);
 
     const fetchUserData = async () => {
         try {
-            const response = await fetch(`${BACKEND_URL}/users/me`, {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                setUser(null);
+                return;
+            }
+
+            const response = await fetch(`${BACKEND_URL}/user/me`, {
                 headers: {
-                    Authorization: `Bearer ${localStorage.getItem('token')}`,
+                    'Authorization': `Bearer ${token}`,
                 },
             });
 
             if (response.ok) {
-                const data = await response.json();
-                setUser(data.user);
+                const { user: userData } = await response.json();
+                // Ensure we have all required user fields
+                if (userData && userData.firstname && userData.lastname) {
+                    setUser(userData);
+                } else {
+                    console.error('Invalid user data received:', userData);
+                    localStorage.removeItem('token');
+                    setUser(null);
+                }
             } else {
                 localStorage.removeItem('token');
                 setUser(null);
             }
-            
         } catch (error) {
+            console.error('Error fetching user data:', error);
             localStorage.removeItem('token');
             setUser(null);
         }
@@ -54,7 +74,6 @@ export const AuthProvider = ({ children }) => {
      * @remarks This function will always navigate to "/".
      */
     const logout = () => {
-        // TODO: complete me
         localStorage.removeItem('token');
         setUser(null);
         navigate("/");
@@ -70,29 +89,53 @@ export const AuthProvider = ({ children }) => {
      */
     const login = async (username, password) => {
         try {
-            const response = await fetch(`${BACKEND_URL}/login`, {
+            const loginResponse = await fetch(`${BACKEND_URL}/login`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ username, password})
+                body: JSON.stringify({ username, password })
             });
 
-            const data = await response.json();
+            const loginData = await loginResponse.json();
 
-            if (!response.ok) {
-                return data.message;
+            if (!loginResponse.ok) {
+                return loginData.message;
             }
 
-            localStorage.setItem('token', data.token);
+            // Store token
+            localStorage.setItem('token', loginData.token);
 
-            await fetchUserData();
+            // Fetch user data
+            const userResponse = await fetch(`${BACKEND_URL}/user/me`, {
+                headers: {
+                    'Authorization': `Bearer ${loginData.token}`,
+                },
+            });
 
-            navigate('/profile');
-
-            return null;
+            if (userResponse.ok) {
+                const { user: userData } = await userResponse.json();
+                // Verify we have the required user data
+                if (userData && userData.firstname && userData.lastname) {
+                    setUser(userData);
+                    navigate('/profile');
+                    return null;
+                } else {
+                    console.error('Invalid user data received:', userData);
+                    localStorage.removeItem('token');
+                    setUser(null);
+                    return "Invalid user data received";
+                }
+            } else {
+                localStorage.removeItem('token');
+                setUser(null);
+                return "Failed to fetch user data";
+            }
         } catch (error) {
-            return "An error occurred while logging in: " + error.message;
+            console.error('Login error:', error);
+            localStorage.removeItem('token');
+            setUser(null);
+            return "An error occurred during login";
         }
     };
 
@@ -113,16 +156,6 @@ export const AuthProvider = ({ children }) => {
                 body: JSON.stringify(userData)
             });
 
-            console.log('Response status:', response.status);
-            const contentType = response.headers.get("content-type");
-            console.log('Content-Type:', contentType);
-
-            if (!contentType || !contentType.includes("application/json")) {
-                const textContent = await response.text();
-                console.error('Non-JSON response:', textContent);
-                return "Server error: Invalid response format";
-            }
-
             const data = await response.json();
 
             if (!response.ok) {
@@ -132,8 +165,7 @@ export const AuthProvider = ({ children }) => {
             navigate("/success");
             return null;
         } catch (error) {
-            console.error('Registration error:', error);
-            return `An error occurred during registration: ${error.message}`;
+            return "An error occurred during registration";
         }
     };
 
