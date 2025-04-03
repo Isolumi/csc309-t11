@@ -92,7 +92,7 @@ export const AuthProvider = ({ children }) => {
 
             return null;
         } catch (error) {
-            return "An error occurred while logging in.";
+            return "An error occurred while logging in: " + error.message;
         }
     };
 
@@ -122,7 +122,7 @@ export const AuthProvider = ({ children }) => {
             navigate("/success");
             return null;
         } catch (error) {
-            return "An error occurred during registration";
+            return "An error occurred during registration: " + error.message;
         }
     };
 
